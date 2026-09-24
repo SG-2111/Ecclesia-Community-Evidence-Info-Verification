@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Submit a Claim — Ecclesia</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="container" style="max-width: 720px;">
+    <nav class="nav">
+        <div class="nav-brand">
+            <div class="nav-logo"><img src="images/logo.png" alt="Ecclesia" onerror="this.style.display='none'"></div>
+            <span>Ecclesia</span>
+        </div>
+        <div class="nav-links">
+            <a href="dashboard.html">← Dashboard</a>
+        </div>
+    </nav>
+
+    <div class="card">
+        <h1 style="font-size: 1.75rem;">Submit a Claim</h1>
+        <p>Provide a structured statement and any supporting evidence.</p>
+
+        <div id="message"></div>
+
+        <div class="form-group">
+            <label>Claim Title *</label>
+            <input type="text" id="title" placeholder="e.g., Drinking X completely prevents illness">
+        </div>
+
+        <div class="form-group">
+            <label>Description</label>
+            <textarea id="description" rows="4" placeholder="Describe the claim in detail..."></textarea>
+        </div>
+
+        <div class="form-group">
+            <label>Source URL</label>
+            <input type="url" id="sourceUrl" placeholder="https://...">
+        </div>
+
+        <div class="divider"></div>
+
+        <h3 style="margin-bottom: 8px;">Evidence (optional, up to 3)</h3>
+        <p style="margin-bottom: 16px; font-size: 0.85rem;">
+            Attach links to studies, articles, or reports. Add a short finding so the AI can reason about what the source actually says — the AI cannot open URLs.
+        </p>
+
+        <div id="evidenceContainer">
+            <div class="evidence-block" style="margin-bottom: 16px; padding: 16px; background: rgba(255,255,255,0.02); border-radius: var(--radius); border: 1px solid var(--border);">
+                <div class="form-group">
+                    <label>Evidence Title</label>
+                    <input type="text" class="ev-title" placeholder="e.g., Cochrane Review on Hand Washing">
+                </div>
+                <div class="form-group">
+                    <label>What does this source say? (key finding)</label>
+                    <input type="text" class="ev-desc" placeholder="e.g., Found strong evidence that hand washing reduces infection">
+                </div>
+                <div class="form-group">
+                    <label>Evidence URL</label>
+                    <input type="url" class="ev-url" placeholder="https://...">
+                </div>
+                <div class="form-group">
+                    <label>Type</label>
+                    <select class="ev-type">
+                        <option value="Study">Study</option>
+                        <option value="News">News</option>
+                        <option value="Report">Report</option>
+                        <option value="Government">Government</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <button class="btn btn-secondary" onclick="addEvidenceSlot()" style="margin-bottom: 16px;">+ Add Another Evidence</button>
+
+        <button class="btn btn-primary btn-block" onclick="submitAll()">Submit Claim →</button>
+    </div>
+</div>
+
+<script>
+    const user = JSON.parse(localStorage.getItem('user') || 'null');
+    if (!user) window.location.href = 'login.html';
+
+    function addEvidenceSlot() {
+        const container = document.getElementById('evidenceContainer');
+        const count = container.querySelectorAll('.evidence-block').length;
+        if (count >= 3) { alert('Maximum 3 evidence items'); return; }
+
+        const block = document.createElement('div');
+        block.className = 'evidence-block';
+        block.style.cssText = 'margin-bottom: 16px; padding: 16px; background: rgba(255,255,255,0.02); border-radius: var(--radius); border: 1px solid var(--border);';
+        block.innerHTML = `
+                <div class="form-group">
+                    <label>Evidence Title</label>
+                    <input type="text" class="ev-title" placeholder="e.g., CDC Handwashing Guidelines">
+                </div>
+                <div class="form-group">
+                    <label>What does this source say? (key finding)</label>
+                    <input type="text" class="ev-desc" placeholder="e.g., Confirms hand washing reduces disease transmission">
+                </div>
+                <div class="form-group">
+                    <label>Evidence URL</label>
+                    <input type="url" class="ev-url" placeholder="https://...">
+                </div>
+                <div class="form-group">
+                    <label>Type</label>
+                    <select class="ev-type">
+                        <option value="Study">Study</option>
+                        <option value="News">News</option>
+                        <option value="Report">Report</option>
+                        <option value="Government">Government</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+            `;
+        container.appendChild(block);
+    }
+
+    async function submitAll() {
+        const title = document.getElementById('title').value.trim();
+        const description = document.getElementById('description').value.trim();
+        const sourceUrl = document.getElementById('sourceUrl').value.trim();
+        const msg = document.getElementById('message');
+
+        if (!title) {
+            msg.innerHTML = '<div class="error">Title is required</div>';
+            return;
+        }
+
+        msg.innerHTML = '<div class="info-box">Submitting claim...</div>';
+
+        try {
+            // Step 1 — Submit the claim
+            const claimRes = await fetch('http://localhost:8080/api/claim/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title, description, sourceUrl, username: user.username })
+            });
+            const claimData = await claimRes.json();
+
+            if (!claimRes.ok) {
+                msg.innerHTML = '<div class="error">' + (claimData.error || 'Submission failed') + '</div>';
+                return;
+            }
+
+            const claimId = claimData.id;
+            msg.innerHTML = '<div class="info-box">Claim #' + claimId + ' created. Attaching evidence...</div>';
+
+            // Step 2 — Attach each evidence block
+            const blocks = document.querySelectorAll('.evidence-block');
+            let evidenceCount = 0;
+
+            for (const block of blocks) {
+                const evTitle = block.querySelector('.ev-title').value.trim();
+                const evDesc  = block.querySelector('.ev-desc').value.trim();
+                const evUrl   = block.querySelector('.ev-url').value.trim();
+                const evType  = block.querySelector('.ev-type').value;
+
+                // Require at least a title to count as evidence
+                if (evTitle) {
+                    const evRes = await fetch('http://localhost:8080/api/claim/evidence', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            claimId: claimId,
+                            title: evTitle,
+                            description: evDesc,
+                            url: evUrl,
+                            type: evType
+                        })
+                    });
+                    if (evRes.ok) {
+                        evidenceCount++;
+                    } else {
+                        const err = await evRes.json().catch(() => ({}));
+                        console.error('Evidence failed:', err);
+                    }
+                }
+            }
+
+            msg.innerHTML = '<div class="success">Claim #' + claimId + ' submitted with '
+                + evidenceCount + ' evidence item(s). AI is analyzing now. Redirecting...</div>';
+            setTimeout(() => window.location.href = 'dashboard.html', 2000);
+
+        } catch (e) {
+            msg.innerHTML = '<div class="error">Server error: ' + e.message + '</div>';
+        }
+    }
+</script>
+</body>
+</html>

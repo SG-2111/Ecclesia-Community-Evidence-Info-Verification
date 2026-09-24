@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard — Ecclesia</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="container">
+    <nav class="nav">
+        <div class="nav-brand">
+            <div class="nav-logo"><img src="images/logo.png" alt="Ecclesia" onerror="this.style.display='none'"></div>
+            <div class="brand-divider"></div>
+            <span>Ecclesia</span>
+        </div>
+        <div class="nav-links">
+            <br>
+            <div class="nav-user" id="navUser"></div>
+            <br>
+            <a href="submit-claim.html" class="btn btn-primary btn-sm">+ New Claim</a>
+            <a href="#" onclick="logout(); return false;">Logout</a>
+        </div>
+    </nav>
+
+    <!-- STAT CARDS (clickable to filter) -->
+    <div class="stats-grid">
+        <div class="stat stat-clickable" data-filter="ALL" onclick="setFilter('ALL')">
+            <span class="stat-value" id="statTotal">0</span>
+            <span class="stat-label">Total Claims</span>
+        </div>
+        <div class="stat stat-clickable" data-filter="VERIFIED" onclick="setFilter('VERIFIED')">
+            <span class="stat-value" id="statVerified">0</span>
+            <span class="stat-label">Verified</span>
+        </div>
+        <div class="stat stat-clickable" data-filter="PENDING" onclick="setFilter('PENDING')">
+            <span class="stat-value" id="statPending">0</span>
+            <span class="stat-label">Pending</span>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-head">
+            <h2 id="claimsHeading">All Claims</h2>
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="Search claims..." oninput="renderClaims()">
+            </div>
+            <br>
+        </div>
+        <div id="claimsList">Loading...</div>
+    </div>
+</div>
+
+<script>
+    // =========================================================
+    // AUTH
+    // =========================================================
+    const user = JSON.parse(localStorage.getItem('user') || 'null');
+    if (!user) window.location.href = 'login.html';
+
+    // Render user pill in nav
+    (function renderNavUser() {
+        const navUser = document.getElementById('navUser');
+        if (!navUser) return;
+        const initials = (user.fullName || user.username || '?')
+            .split(' ')
+            .map(w => w[0])
+            .slice(0, 2)
+            .join('')
+            .toUpperCase();
+        navUser.innerHTML = `
+            <div class="user-avatar">${initials}</div>
+            <div class="user-details">
+                <span class="user-name">${escapeHtml(user.fullName || user.username)}</span>
+                <span class="user-role">${escapeHtml(user.role || 'USER')}</span>
+            </div>
+        `;
+    })();
+
+    // =========================================================
+    // STATE
+    // =========================================================
+    let allClaims = [];
+    let activeFilter = 'ALL';
+
+    // =========================================================
+    // HELPERS
+    // =========================================================
+    function escapeHtml(str) {
+        if (str === null || str === undefined) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function formatDateTime(str) {
+        if (!str) return 'N/A';
+        // Handles "2026-09-18 14:00:00" or "2026-09-18T14:00:00"
+        const m = String(str).match(/(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+        if (!m) return str;
+        const [, y, mo, d, h, mi] = m;
+        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const hh = parseInt(h, 10);
+        const ampm = hh >= 12 ? 'PM' : 'AM';
+        const h12 = hh % 12 || 12;
+        return `${d} ${months[parseInt(mo, 10) - 1]} ${y}, ${h12}:${mi} ${ampm}`;
+    }
+
+    function statusMatchesFilter(status, filter) {
+        if (filter === 'ALL') return true;
+        if (filter === 'PENDING') return status === 'PENDING' || status === 'AI_ANALYSED' || status === 'NEEDS_INFO';
+        return status === filter;
+    }
+
+    // =========================================================
+    // FILTER + SEARCH
+    // =========================================================
+    function setFilter(filter) {
+        activeFilter = filter;
+
+        // Visual highlight
+        document.querySelectorAll('.stat-clickable').forEach(el => {
+            el.classList.toggle('active', el.dataset.filter === filter);
+        });
+
+        // Heading update
+        const headingMap = {
+            'ALL': 'All Claims',
+            'VERIFIED': 'Verified Claims',
+            'PENDING': 'Pending Claims'
+        };
+        document.getElementById('claimsHeading').textContent = headingMap[filter] || 'Claims';
+
+        renderClaims();
+    }
+
+    function renderClaims() {
+        const container = document.getElementById('claimsList');
+        const query = (document.getElementById('searchInput')?.value || '').toLowerCase().trim();
+
+        let filtered = allClaims.filter(c => statusMatchesFilter(c.status, activeFilter));
+
+        if (query) {
+            filtered = filtered.filter(c =>
+                (c.title || '').toLowerCase().includes(query) ||
+                (c.description || '').toLowerCase().includes(query) ||
+                (c.submitter && (c.submitter.username || '').toLowerCase().includes(query))
+            );
+        }
+
+        if (allClaims.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">🔍</div>
+                    <h3>No claims yet</h3>
+                    <p>Be the first to submit a claim and start the verification process.</p>
+                    <a href="submit-claim.html" class="btn btn-primary" style="margin-top: 16px;">Submit the first claim →</a>
+                </div>
+            `;
+            return;
+        }
+
+        if (filtered.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">🔎</div>
+                    <h3>No matching claims</h3>
+                    <p>Try a different search term or filter.</p>
+                    <button class="btn btn-secondary" style="margin-top: 16px;" onclick="clearFilters()">Clear filters</button>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = filtered.map(c => `
+            <div class="claim-card">
+                <h3>${escapeHtml(c.title)}</h3>
+                <p>${escapeHtml(c.description || 'No description provided.')}</p>
+                <div class="claim-meta">
+                    <span>👤 ${c.submitter ? escapeHtml(c.submitter.username) : 'Unknown'}</span>
+                    <span>🕐 ${formatDateTime(c.submissionDate)}</span>
+                </div>
+                <span class="status status-${c.status}">${c.status}</span>
+                ${c.aiAnalysis ? `<div class="ai-box" style="margin-top: 16px;">
+                    <strong>🤖 AI:</strong> Relevance ${c.aiAnalysis.relevanceScore}/100 ·
+                    ${c.aiAnalysis.contradiction ? '⚠️ Contradiction' : '✅ No contradiction'}<br>
+                    <em>${escapeHtml(c.aiAnalysis.summary || '')}</em>
+                </div>` : ''}
+                <div class="claim-actions">
+                    <a href="claim-detail.html?id=${c.id}" class="btn btn-secondary btn-sm">View Details →</a>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function clearFilters() {
+        document.getElementById('searchInput').value = '';
+        setFilter('ALL');
+    }
+
+    // =========================================================
+    // LOAD CLAIMS
+    // =========================================================
+    async function loadClaims() {
+        try {
+            const res = await fetch('http://localhost:8080/api/claim/all');
+            const claims = await res.json();
+            allClaims = Array.isArray(claims) ? claims : [];
+
+            // Stats
+            document.getElementById('statTotal').textContent = allClaims.length;
+            document.getElementById('statVerified').textContent =
+                allClaims.filter(c => c.status === 'VERIFIED').length;
+            document.getElementById('statPending').textContent =
+                allClaims.filter(c => c.status === 'PENDING' || c.status === 'AI_ANALYSED' || c.status === 'NEEDS_INFO').length;
+
+            renderClaims();
+        } catch (e) {
+            document.getElementById('claimsList').innerHTML =
+                '<div class="error">Failed to load: ' + e.message + '</div>';
+        }
+    }
+
+    // =========================================================
+    // LOGOUT
+    // =========================================================
+    function logout() {
+        localStorage.removeItem('user');
+        window.location.href = 'login.html';
+    }
+
+    // =========================================================
+    // BOOT
+    // =========================================================
+    loadClaims();
+</script>
+</body>
+</html>

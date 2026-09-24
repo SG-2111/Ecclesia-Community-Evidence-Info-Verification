@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register — Ecclesia</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="container" style="max-width: 440px; padding-top: 40px;">
+    <div class="nav">
+        <div class="nav-brand">
+            <div class="nav-logo"><img src="images/logo.png" alt="Ecclesia"></div>
+            <div class="brand-divider"></div>
+            <span>Ecclesia</span>
+        </div>
+        <div class="nav-links">
+            <a href="index.html">← Home</a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="text-center mb-4">
+            <h1 style="font-size: 1.75rem;">Create Account</h1>
+            <p>Join the verification community!</p>
+        </div>
+
+        <div id="message"></div>
+
+        <div class="form-group">
+            <label>Username</label>
+            <input type="text" id="username" placeholder="Choose a username">
+        </div>
+
+        <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="password" placeholder="At least 4 characters">
+        </div>
+
+        <div class="form-group">
+            <label>Full Name</label>
+            <input type="text" id="fullName" placeholder="Your full name">
+        </div>
+
+        <div class="form-group">
+            <label>Role</label>
+            <select id="role">
+                <option value="USER">User — Submit claims</option>
+                <option value="REVIEWER">Reviewer — Evaluate claims</option>
+            </select>
+        </div>
+
+        <button class="btn btn-primary btn-block btn-lg" onclick="register()">Create Account</button>
+
+        <p class="text-center mt-4" style="font-size: 0.9rem;">
+            Already have an account? <a href="login.html">Sign in →</a>
+        </p>
+    </div>
+</div>
+
+<script>
+    async function register() {
+        const username = document.getElementById('username').value.trim();
+        const password = document.getElementById('password').value;
+        const fullName = document.getElementById('fullName').value.trim();
+        const role = document.getElementById('role').value;
+        const msg = document.getElementById('message');
+
+        if (!username || !password || !fullName) {
+            msg.innerHTML = '<div class="error">Please fill all fields</div>';
+            return;
+        }
+
+        try {
+            const res = await fetch('http://localhost:8080/api/user/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password, fullName, role })
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                msg.innerHTML = '<div class="success">Account created! Redirecting to login...</div>';
+                setTimeout(() => window.location.href = 'login.html', 1500);
+            } else {
+                msg.innerHTML = '<div class="error">' + (data.error || 'Registration failed') + '</div>';
+            }
+        } catch (e) {
+            msg.innerHTML = '<div class="error">Server error: ' + e.message + '</div>';
+        }
+    }
+</script>
+</body>
+</html>

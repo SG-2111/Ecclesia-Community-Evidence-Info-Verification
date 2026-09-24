@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claim Details — Ecclesia</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="container">
+    <nav class="nav">
+        <div class="nav-brand">
+            <div class="nav-logo"><img src="images/logo.png" alt="Ecclesia" onerror="this.style.display='none'"></div>
+            <span>Ecclesia</span>
+        </div>
+        <div class="nav-links">
+            <a href="dashboard.html">← Dashboard</a>
+            <a href="#" onclick="logout(); return false;">Logout</a>
+        </div>
+    </nav>
+
+    <div id="content">Loading...</div>
+</div>
+
+<div id="reportModal" class="modal-overlay">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>📄 Verification Report</h2>
+            <button class="btn btn-secondary btn-sm" onclick="closeReport()">✕ Close</button>
+        </div>
+        <div class="modal-body">
+            <pre id="reportContent"></pre>
+        </div>
+    </div>
+</div>
+
+<script>
+    const user = JSON.parse(localStorage.getItem('user') || 'null');
+    if (!user) window.location.href = 'login.html';
+
+    const params = new URLSearchParams(window.location.search);
+    const claimId = params.get('id');
+
+    if (!claimId) {
+        document.getElementById('content').innerHTML =
+            '<div class="error">No claim ID provided. <a href="dashboard.html">Go back</a></div>';
+    }
+
+    // ---- Date formatter for IST strings like "2026-09-18 14:00:00" ----
+    function formatDateTime(str) {
+        if (!str) return 'N/A';
+        const m = String(str).match(/(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+        if (!m) return str;
+        const [, y, mo, d, h, mi] = m;
+        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const hh = parseInt(h, 10);
+        const ampm = hh >= 12 ? 'PM' : 'AM';
+        const h12 = hh % 12 || 12;
+        return `${d} ${months[parseInt(mo, 10) - 1]} ${y}, ${h12}:${mi} ${ampm}`;
+    }
+
+    function escapeHtml(str) {
+        if (str === null || str === undefined) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    // =========================================================
+    // MAIN LOAD
+    // =========================================================
+    async function loadClaim() {
+        try {
+            const res = await fetch(`http://localhost:8080/api/claim/detail?id=${claimId}`);
+            const claim = await res.json();
+
+            if (!res.ok) {
+                document.getElementById('content').innerHTML =
+                    '<div class="error">' + (claim.error || 'Claim not found') + '</div>';
+                return;
+            }
+
+            const reviewsRes = await fetch(`http://localhost:8080/api/review/claim?claimId=${claimId}`);
+            const reviews = await reviewsRes.json();
+
+            // ---- Compute evidence list (defensive) ----
+            const evidence = Array.isArray(claim.evidenceList) ? claim.evidenceList : [];
+
+            let html = `
+                    <div class="card">
+                        <div class="claim-meta" style="margin-bottom: 12px;">
+                            <span>👤 ${claim.submitter ? escapeHtml(claim.submitter.username) : 'Unknown'}</span>
+                            <span>🕐 ${formatDateTime(claim.submissionDate)}</span>
+                            <span class="status status-${claim.status}">${claim.status}</span>
+                        </div>
+                        <h1 style="font-size: 1.75rem;">${escapeHtml(claim.title)}</h1>
+                        <p>${escapeHtml(claim.description || 'No description provided.')}</p>
+                        ${claim.sourceUrl ? `<p style="font-size: 0.85rem;"><strong style="color: var(--text);">Source:</strong> <a href="${escapeHtml(claim.sourceUrl)}" target="_blank">${escapeHtml(claim.sourceUrl)}</a></p>` : ''}
+                        <div class="claim-actions">
+                            <button class="btn btn-secondary btn-sm" onclick="viewReport()">📄 View Full Report</button>
+                        </div>
+                    </div>
+
+                    <!-- ============ EVIDENCE SECTION ============ -->
+                    <div class="card">
+                        <h2>📎 Evidence (${evidence.length})</h2>
+                        ${evidence.length > 0
+                ? evidence.map(e => `
+                                <div class="claim-card">
+                                    <h3>${escapeHtml(e.title)}</h3>
+                                    <div class="claim-meta">
+                                        <span>📁 ${escapeHtml(e.type || 'N/A')}</span>
+                                    </div>
+                                    ${e.description
+                    ? `<p style="margin-top: 10px; margin-bottom: 10px; font-size: 0.88rem; color: var(--text-muted); line-height: 1.5;"><strong style="color: var(--text);">Finding:</strong> <em>${escapeHtml(e.description)}</em></p>`
+                    : ''}
+                                    ${e.url
+                    ? `<a href="${escapeHtml(e.url)}" target="_blank" style="font-size: 0.85rem; word-break: break-all;">${escapeHtml(e.url)}</a>`
+                    : '<small>No URL</small>'}
+                                </div>
+                            `).join('')
+                : '<p>No evidence added yet.</p>'}
+                    </div>
+                    <!-- ============ END EVIDENCE ============ -->
+                `;
+
+            // ---- AI Analysis ----
+            if (claim.aiAnalysis) {
+                html += `
+                        <div class="card">
+                            <h2>🤖 AI Analysis</h2>
+                            <div class="ai-box">
+                                <p><strong>Relevance Score:</strong> ${claim.aiAnalysis.relevanceScore}/100</p>
+                                <p><strong>Contradiction:</strong> ${claim.aiAnalysis.contradiction ? '⚠️ Yes' : '✅ No'}</p>
+                                <p><strong>Summary:</strong> ${escapeHtml(claim.aiAnalysis.summary || 'N/A')}</p>
+                                <small>Analysed at ${formatDateTime(claim.aiAnalysis.analysisDate)}</small>
+                            </div>
+                        </div>
+                    `;
+            } else {
+                html += `<div class="card"><h2>🤖 AI Analysis</h2><p>⏳ Analysis pending or not performed yet.</p></div>`;
+            }
+
+            // ---- Community Reviews ----
+            html += `
+                    <div class="card">
+                        <h2>👥 Community Reviews (${reviews.length || 0})</h2>
+                        ${reviews && reviews.length > 0
+                ? reviews.map(r => `
+                                <div class="claim-card">
+                                    <div class="claim-meta">
+                                        <span>👤 ${r.reviewer ? escapeHtml(r.reviewer.username) : 'Unknown'}</span>
+                                        <span class="status status-${r.verdict}">${r.verdict}</span>
+                                    </div>
+                                    <p style="color: var(--text);">${escapeHtml(r.reviewText)}</p>
+                                    <small>${formatDateTime(r.reviewDate)}</small>
+                                </div>
+                            `).join('')
+                : '<p>No reviews yet.</p>'}
+                    </div>
+                `;
+
+            // ---- Review form for REVIEWER role ----
+            if (user.role === 'REVIEWER') {
+                html += `
+                        <div class="card">
+                            <h2>✍️ Submit Your Review</h2>
+                            <div id="reviewMessage"></div>
+                            <div class="form-group">
+                                <label>Your Analysis</label>
+                                <textarea id="reviewText" rows="4" placeholder="Provide your analysis of the claim and evidence..."></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label>Verdict</label>
+                                <select id="verdict">
+                                    <option value="VERIFIED">✅ VERIFIED</option>
+                                    <option value="REJECTED">❌ REJECTED</option>
+                                    <option value="NEEDS_INFO">⚠️ NEEDS MORE INFORMATION</option>
+                                </select>
+                            </div>
+                            <button class="btn btn-primary btn-block" onclick="submitReview()">Submit Review</button>
+                        </div>
+                    `;
+            }
+
+            document.getElementById('content').innerHTML = html;
+
+        } catch (e) {
+            document.getElementById('content').innerHTML = '<div class="error">Error: ' + e.message + '</div>';
+        }
+    }
+
+    // =========================================================
+    // SUBMIT REVIEW
+    // =========================================================
+    async function submitReview() {
+        const text = document.getElementById('reviewText').value.trim();
+        const verdict = document.getElementById('verdict').value;
+        const msg = document.getElementById('reviewMessage');
+
+        if (!text) {
+            msg.innerHTML = '<div class="error">Review text is required</div>';
+            return;
+        }
+
+        try {
+            const res = await fetch('http://localhost:8080/api/review/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    claimId: parseInt(claimId),
+                    reviewerUsername: user.username,
+                    reviewText: text,
+                    verdict
+                })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                msg.innerHTML = '<div class="success">Review submitted!</div>';
+                setTimeout(() => loadClaim(), 1000);
+            } else {
+                msg.innerHTML = '<div class="error">' + (data.error || 'Failed') + '</div>';
+            }
+        } catch (e) {
+            msg.innerHTML = '<div class="error">Server error: ' + e.message + '</div>';
+        }
+    }
+
+    // =========================================================
+    // REPORT
+    // =========================================================
+    async function viewReport() {
+        const modal = document.getElementById('reportModal');
+        const content = document.getElementById('reportContent');
+        content.textContent = 'Generating report...';
+        modal.classList.add('active');
+
+        try {
+            const res = await fetch(`http://localhost:8080/api/report/claim?claimId=${claimId}`);
+            const data = await res.json();
+            content.textContent = res.ok
+                ? (data.content || 'No content')
+                : ('Failed: ' + (data.error || 'Unknown'));
+        } catch (e) {
+            content.textContent = 'Server error: ' + e.message;
+        }
+    }
+
+    function closeReport() {
+        document.getElementById('reportModal').classList.remove('active');
+    }
+
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeReport(); });
+    document.getElementById('reportModal').addEventListener('click', e => {
+        if (e.target.id === 'reportModal') closeReport();
+    });
+
+    function logout() {
+        localStorage.removeItem('user');
+        window.location.href = 'login.html';
+    }
+
+    loadClaim();
+</script>
+</body>
+</html>

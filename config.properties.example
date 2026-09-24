@@ -1,0 +1,9 @@
+# config.properties.example - copy this to config.properties and fill in real values
+
+db.url=jdbc:mysql://localhost:3306/evidence_db?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+
+db.user=root
+db.password=YOUR_MYSQL_PASSWORD
+
+openai.api.key=YOUR_OPENAI_API_KEY
+server.port=8080
