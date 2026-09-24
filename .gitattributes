@@ -1,12 +1,25 @@
-# Handle text files automatically and normalize to LF in the repo
-* text=auto
+# Auto-detect text files and normalize to LF in the repository
+* text=auto eol=lf
 
-# Explicitly declare files that must always use LF (e.g., shell scripts)
-*.sh text eol=lf
+# Explicitly declare text files that should always use LF
+*.java    text eol=lf
+*.xml     text eol=lf
+*.properties text eol=lf
+*.md      text eol=lf
+*.html    text eol=lf
+*.css     text eol=lf
+*.js      text eol=lf
+*.sql     text eol=lf
+Dockerfile text eol=lf
+.gitattributes text eol=lf
+.gitignore text eol=lf
 
-# Explicitly declare files that must always use CRLF (e.g., Windows batch files)
-*.bat text eol=crlf
-
-# Denote binary files so Git leaves them completely untouched
-*.png binary
-*.jpg binary
+# Binary files — never touch these
+*.jar     binary
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.ico     binary
+*.class   binary
+*.ser     binary

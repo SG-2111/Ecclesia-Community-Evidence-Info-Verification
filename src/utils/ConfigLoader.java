@@ -18,10 +18,15 @@ public class ConfigLoader {
     }
 
     public static String get(String key) {
-        return props.getProperty(key);
+        return props.getProperty(key, null);
     }
 
     public static String get(String key, String defaultValue) {
+        String envKey = key.toUpperCase().replace('.', '_');
+        String envValue = System.getenv(envKey);
+        if (envValue != null && !envValue.isEmpty()) {
+            return envValue;
+        }
         return props.getProperty(key, defaultValue);
     }
 

@@ -9,16 +9,17 @@ public class Main {
         System.setProperty("user.timezone", "Asia/Kolkata");
 
         try {
+            int port = Integer.parseInt(System.getenv().getOrDefault("PORT", "8080"));
             CredibilityService credService = new CredibilityService();
             Thread daemon = new Thread(credService);
             daemon.setDaemon(true);
             daemon.start();
 
-            ApiServer server = new ApiServer(8080);
+            ApiServer server = new ApiServer(PORT);
             server.start();
 
             System.out.println("=== Community Evidence Verification Platform ===");
-            System.out.println("Server running at http://localhost:8080");
+            System.out.println("Server running on port " + port);
             System.out.println("Open web/index.html in your browser");
             System.out.println("Press Ctrl+C to stop");
 
