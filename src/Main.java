@@ -15,7 +15,7 @@ public class Main {
             daemon.setDaemon(true);
             daemon.start();
 
-            ApiServer server = new ApiServer(PORT);
+            ApiServer server = new ApiServer(port);
             server.start();
 
             System.out.println("=== Community Evidence Verification Platform ===");
